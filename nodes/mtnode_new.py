@@ -8,7 +8,6 @@ import mtdevice
 from std_msgs.msg import Header, Float32, String, UInt16
 from sensor_msgs.msg import Imu, NavSatFix, NavSatStatus
 from geometry_msgs.msg import TwistStamped, Vector3Stamped
-from gps_common.msg import GPSFix, GPSStatus
 from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus, KeyValue
 import time
 
@@ -28,9 +27,9 @@ def get_param(name, default):
 	return v
 
 class XSensDriver(object):
-	
+
 	def __init__(self):
-		
+
 		device = get_param('~device', 'auto')
 		baudrate = get_param('~baudrate', 0)
 		if device=='auto':
@@ -54,7 +53,7 @@ class XSensDriver(object):
 		self.mt = mtdevice.MTDevice(device, baudrate)
 
 		self.frame_id = get_param('~frame_id', '/base_imu')
-		
+
 		self.diag_pub = rospy.Publisher('/diagnostics', DiagnosticArray)
 		self.diag_msg = DiagnosticArray()
 		self.stest_stat = DiagnosticStatus(name='mtnode: Self Test', level=1,
@@ -67,7 +66,6 @@ class XSensDriver(object):
 
 		self.imu_pub = rospy.Publisher('imu/data', Imu)
 		self.gps_pub = rospy.Publisher('fix', NavSatFix)
-		self.xgps_pub = rospy.Publisher('fix_extended', GPSFix)
 		self.vel_pub = rospy.Publisher('velocity', TwistStamped)
 		self.mag_pub = rospy.Publisher('magnetic', Vector3Stamped)
 		self.temp_pub = rospy.Publisher('temperature', Float32)	# decide type+header
@@ -97,7 +95,7 @@ class XSensDriver(object):
 		h = Header()
 		h.stamp = rospy.Time.now()
 		h.frame_id = self.frame_id
-		
+
 		# create messages and default values
 		imu_msg = Imu()
 		imu_msg.orientation_covariance = (-1., )*9
@@ -105,7 +103,6 @@ class XSensDriver(object):
 		imu_msg.linear_acceleration_covariance = (-1., )*9
 		pub_imu = False
 		gps_msg = NavSatFix()
-		xgps_msg = GPSFix()
 		pub_gps = False
 		vel_msg = TwistStamped()
 		pub_vel = False
@@ -120,35 +117,30 @@ class XSensDriver(object):
 		anin2_msg = UInt16()
 		pub_anin2 = False
 		pub_diag = False
-		
+
 		def fill_from_raw(raw_data):
 			'''Fill messages with information from 'raw' MTData block.'''
 			# don't publish raw imu data anymore
 			# TODO find what to do with that
 			pass
-		
+
 		def fill_from_rawgps(rawgps_data):
 			'''Fill messages with information from 'rawgps' MTData block.'''
-			global pub_hps, xgps_msg, gps_msg
+			global pub_hps, gps_msg
 			if rawgps_data['bGPS']<self.old_bGPS:
 				pub_gps = True
 				# LLA
-				xgps_msg.latitude = gps_msg.latitude = rawgps_data['LAT']*1e-7
-				xgps_msg.longitude = gps_msg.longitude = rawgps_data['LON']*1e-7
-				xgps_msg.altitude = gps_msg.altitude = rawgps_data['ALT']*1e-3
 				# NED vel # TODO?
 				# Accuracy
 				# 2 is there to go from std_dev to 95% interval
-				xgps_msg.err_horz = 2*rawgps_data['Hacc']*1e-3
-				xgps_msg.err_vert = 2*rawgps_data['Vacc']*1e-3
 			self.old_bGPS = rawgps_data['bGPS']
-		
+
 		def fill_from_Temp(temp):
 			'''Fill messages with information from 'temperature' MTData block.'''
 			global pub_temp, temp_msg
 			pub_temp = True
 			temp_msg.data = temp
-		
+
 		def fill_from_Calib(imu_data):
 			'''Fill messages with information from 'calibrated' MTData block.'''
 			global pub_imu, imu_msg, pub_vel, vel_msg, pub_mag, mag_msg
@@ -173,7 +165,7 @@ class XSensDriver(object):
 				imu_msg.linear_acceleration_covariance = (0.0004, 0., 0., 0.,
 						0.0004, 0., 0., 0., 0.0004)
 			except KeyError:
-				pass			
+				pass
 			try:
 				pub_mag = True
 				mag_msg.vector.x = imu_data['magX']
@@ -181,7 +173,7 @@ class XSensDriver(object):
 				mag_msg.vector.z = imu_data['magZ']
 			except KeyError:
 				pass
-		
+
 		def fill_from_Vel(velocity_data):
 			'''Fill messages with information from 'velocity' MTData block.'''
 			global pub_vel, vel_msg
@@ -189,7 +181,7 @@ class XSensDriver(object):
 			vel_msg.twist.linear.x = velocity_data['Vel_X']
 			vel_msg.twist.linear.y = velocity_data['Vel_Y']
 			vel_msg.twist.linear.z = velocity_data['Vel_Z']
-		
+
 		def fill_from_Orient(orient_data):
 			'''Fill messages with information from 'orientation' MTData block.'''
 			global pub_imu, imu_msg
@@ -210,18 +202,15 @@ class XSensDriver(object):
 			imu_msg.orientation.w = w
 			imu_msg.orientation_covariance = (radians(1.), 0., 0., 0.,
 					radians(1.), 0., 0., 0., radians(9.))
-		
+
 		def fill_from_Pos(position_data):
 			'''Fill messages with information from 'position' MTData block.'''
-			global pub_gps, xgps_msg, gps_msg
+			global pub_gps, gps_msg
 			pub_gps = True
-			xgps_msg.latitude = gps_msg.latitude = position_data['Lat']
-			xgps_msg.longitude = gps_msg.longitude = position_data['Lon']
-			xgps_msg.altitude = gps_msg.altitude = position_data['Alt']
-		
+
 		def fill_from_Stat(status):
 			'''Fill messages with information from 'status' MTData block.'''
-			global pub_diag, pub_gps, gps_msg, xgps_msg
+			global pub_diag, pub_gps, gps_msg
 			pub_diag = True
 			if status & 0b0001:
 				self.stest_stat.level = DiagnosticStatus.OK
@@ -239,20 +228,12 @@ class XSensDriver(object):
 				self.gps_stat.level = DiagnosticStatus.OK
 				self.gps_stat.message = "Ok"
 				gps_msg.status.status = NavSatStatus.STATUS_FIX
-				xgps_msg.status.status = GPSStatus.STATUS_FIX
 				gps_msg.status.service = NavSatStatus.SERVICE_GPS
-				xgps_msg.status.position_source = 0b01101001
-				xgps_msg.status.motion_source = 0b01101010
-				xgps_msg.status.orientation_source = 0b01101010
 			else:
 				self.gps_stat.level = DiagnosticStatus.WARN
 				self.gps_stat.message = "No fix"
 				gps_msg.status.status = NavSatStatus.STATUS_NO_FIX
-				xgps_msg.status.status = GPSStatus.STATUS_NO_FIX
 				gps_msg.status.service = 0
-				xgps_msg.status.position_source = 0b01101000
-				xgps_msg.status.motion_source = 0b01101000
-				xgps_msg.status.orientation_source = 0b01101000
 
 		def fill_from_Auxiliary(aux_data):
 			'''Fill messages with information from 'Auxiliary' MTData block.'''
@@ -273,7 +254,7 @@ class XSensDriver(object):
 			global pub_temp, temp_msg
 			pub_temp = True
 			temp_msg.data = o['Temp']
-		
+
 		def fill_from_Timestamp(o):
 			'''Fill messages with information from 'Timestamp' MTData2 block.'''
 			global h
@@ -289,7 +270,7 @@ class XSensDriver(object):
 				pass
 			# TODO find what to do with other kind of information
 			pass
-		
+
 		def fill_from_Orientation_Data(o):
 			'''Fill messages with information from 'Orientation Data' MTData2 block.'''
 			global pub_imu, imu_msg
@@ -298,7 +279,7 @@ class XSensDriver(object):
 				x, y, z, w = o['Q1'], o['Q2'], o['Q3'], o['Q0']
 			except KeyError:
 				pass
-			try: 
+			try:
 				# FIXME check that Euler angles are in radians
 				x, y, z, w = quaternion_from_euler(radians(o['Roll']),
 						radians(o['Pitch']), radians(o['Yaw']))
@@ -318,12 +299,12 @@ class XSensDriver(object):
 			imu_msg.orientation.w = w
 			imu_msg.orientation_covariance = (radians(1.), 0., 0., 0.,
 					radians(1.), 0., 0., 0., radians(9.))
-		
+
 		def fill_from_Pressure(o):
 			'''Fill messages with information from 'Pressure' MTData2 block.'''
 			global pub_press, press_msg
 			press_msg.data = o['Pressure']
-		
+
 		def fill_from_Acceleration(o):
 			'''Fill messages with information from 'Acceleration' MTData2 block.'''
 			global pub_imu, imu_msg
@@ -346,20 +327,17 @@ class XSensDriver(object):
 			imu_msg.linear_acceleration.z = z
 			imu_msg.linear_acceleration_covariance = (0.0004, 0., 0., 0.,
 					0.0004, 0., 0., 0., 0.0004)
-		
+
 		def fill_from_Position(o):
 			'''Fill messages with information from 'Position' MTData2 block.'''
-			global pub_gps, xgps_msg, gps_msg
+			global pub_gps, gps_msg
 			# TODO publish ECEF
 			try:
-				xgps_msg.latitude = gps_msg.latitude = o['lat']
-				xgps_msg.longitude = gps_msg.longitude = o['lon']
 				pub_gps = True
 				alt = o.get('altMsl', o.get('altEllipsoid', 0))
-				xgps_msg.altitude = gps_msg.altitude = alt
 			except KeyError:
 				pass
-		
+
 		def fill_from_Angular_Velocity(o):
 			'''Fill messages with information from 'Angular Velocity' MTData2 block.'''
 			global pub_imu, imu_msg, pub_vel, vel_msg
@@ -380,13 +358,8 @@ class XSensDriver(object):
 
 		def fill_from_GPS(o):
 			'''Fill messages with information from 'GPS' MTData2 block.'''
-			global pub_gps, h, xgps_msg
+			global pub_gps, h
 			try:	# DOP
-				xgps_msg.gdop = o['gDOP']
-				xgps_msg.pdop = o['pDOP']
-				xgps_msg.hdop = o['hDOP']
-				xgps_msg.vdop = o['vDOP']
-				xgps_msg.tdop = o['tDOP']
 				pub_gps = True
 			except KeyError:
 				pass
@@ -467,9 +440,7 @@ class XSensDriver(object):
 			imu_msg.header = h
 			self.imu_pub.publish(imu_msg)
 		if pub_gps:
-			xgps_msg.header = gps_msg.header = h
 			self.gps_pub.publish(gps_msg)
-			self.xgps_pub.publish(xgps_msg)
 		if pub_vel:
 			vel_msg.header = h
 			self.vel_pub.publish(vel_msg)
@@ -501,5 +472,5 @@ def main():
 
 if __name__== '__main__':
 	main()
-	
-		
+
+

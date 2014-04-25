@@ -8,7 +8,6 @@ import mtdevice
 from std_msgs.msg import Header, Float32
 from sensor_msgs.msg import Imu, NavSatFix, NavSatStatus
 from geometry_msgs.msg import TwistStamped, Vector3Stamped
-from gps_common.msg import GPSFix, GPSStatus
 from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus, KeyValue
 
 
@@ -29,13 +28,13 @@ def get_param(name, default):
 	return v
 
 class XSensDriver(object):
-	
+
 	ENU = numpy.identity(3)
 	NED = numpy.array([[0, 1, 0], [ 1, 0, 0], [0, 0, -1]])
 	NWU = numpy.array([[0, 1, 0], [-1, 0, 0], [0, 0,  1]])
 
 	def __init__(self):
-		
+
 		device = get_param('~device', 'auto')
 		baudrate = get_param('~baudrate', 0)
 		if device=='auto':
@@ -59,7 +58,7 @@ class XSensDriver(object):
 		self.mt = mtdevice.MTDevice(device, baudrate)
 
 		self.frame_id = get_param('~frame_id', '/base_imu')
-		
+
 		frame_local     = get_param('~frame_local'    , 'NED')
 		frame_local_imu = get_param('~frame_local_imu', 'NWU')
 
@@ -91,7 +90,6 @@ class XSensDriver(object):
 
 		self.imu_pub = rospy.Publisher('imu/data', Imu)
 		self.gps_pub = rospy.Publisher('fix', NavSatFix)
-		self.xgps_pub = rospy.Publisher('fix_extended', GPSFix)
 		self.vel_pub = rospy.Publisher('velocity', TwistStamped)
 		self.mag_pub = rospy.Publisher('magnetic', Vector3Stamped)
 		self.temp_pub = rospy.Publisher('temperature', Float32)	# decide type
@@ -136,7 +134,7 @@ class XSensDriver(object):
 		h = Header()
 		h.stamp = rospy.Time.now()
 		h.frame_id = self.frame_id
-		
+
 		# get data (None if not present)
 		temp = data.get('Temp')	# float
 		raw_data = data.get('RAW')
@@ -154,7 +152,6 @@ class XSensDriver(object):
 		imu_msg.linear_acceleration_covariance = (-1., )*9
 		pub_imu = False
 		gps_msg = NavSatFix()
-		xgps_msg = GPSFix()
 		pub_gps = False
 		vel_msg = TwistStamped()
 		pub_vel = False
@@ -162,7 +159,7 @@ class XSensDriver(object):
 		pub_mag = False
 		temp_msg = Float32()
 		pub_temp = False
-		
+
 		# fill information where it's due
 		# start by raw information that can be overriden
 		if raw_data: # TODO warn about data not calibrated
@@ -198,14 +195,9 @@ class XSensDriver(object):
 			if rawgps_data['bGPS']<self.old_bGPS:
 				pub_gps = True
 				# LLA
-				xgps_msg.latitude = gps_msg.latitude = rawgps_data['LAT']*1e-7
-				xgps_msg.longitude = gps_msg.longitude = rawgps_data['LON']*1e-7
-				xgps_msg.altitude = gps_msg.altitude = rawgps_data['ALT']*1e-3
 				# NED vel # TODO?
 				# Accuracy
 				# 2 is there to go from std_dev to 95% interval
-				xgps_msg.err_horz = 2*rawgps_data['Hacc']*1e-3
-				xgps_msg.err_vert = 2*rawgps_data['Vacc']*1e-3
 			self.old_bGPS = rawgps_data['bGPS']
 		if temp is not None:
 			pub_temp = True
@@ -246,7 +238,7 @@ class XSensDriver(object):
 						0.0004, 0., 0., 0., 0.0004)
 				pub_imu = True
 			except KeyError:
-				pass			
+				pass
 			try:
 				x = imu_data['magX']
 				y = imu_data['magY']
@@ -277,9 +269,6 @@ class XSensDriver(object):
 					radians(1.), 0., 0., 0., radians(9.))
 		if position_data:
 			pub_gps = True
-			xgps_msg.latitude = gps_msg.latitude = position_data['Lat']
-			xgps_msg.longitude = gps_msg.longitude = position_data['Lon']
-			xgps_msg.altitude = gps_msg.altitude = position_data['Alt']
 		if status is not None:
 			if status & 0b0001:
 				self.stest_stat.level = DiagnosticStatus.OK
@@ -305,26 +294,16 @@ class XSensDriver(object):
 			if pub_gps:
 				if status & 0b0100:
 					gps_msg.status.status = NavSatStatus.STATUS_FIX
-					xgps_msg.status.status = GPSStatus.STATUS_FIX
 					gps_msg.status.service = NavSatStatus.SERVICE_GPS
-					xgps_msg.status.position_source = 0b01101001
-					xgps_msg.status.motion_source = 0b01101010
-					xgps_msg.status.orientation_source = 0b01101010
 				else:
 					gps_msg.status.status = NavSatStatus.STATUS_NO_FIX
-					xgps_msg.status.status = GPSStatus.STATUS_NO_FIX
 					gps_msg.status.service = 0
-					xgps_msg.status.position_source = 0b01101000
-					xgps_msg.status.motion_source = 0b01101000
-					xgps_msg.status.orientation_source = 0b01101000
 		# publish available information
 		if pub_imu:
 			imu_msg.header = h
 			self.imu_pub.publish(imu_msg)
 		if pub_gps:
-			xgps_msg.header = gps_msg.header = h
 			self.gps_pub.publish(gps_msg)
-			self.xgps_pub.publish(xgps_msg)
 		if pub_vel:
 			vel_msg.header = h
 			self.vel_pub.publish(vel_msg)
@@ -345,5 +324,5 @@ def main():
 
 if __name__== '__main__':
 	main()
-	
-		
+
+
