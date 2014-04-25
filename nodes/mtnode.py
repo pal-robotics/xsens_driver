@@ -63,18 +63,18 @@ class XSensDriver(object):
 		frame_local_imu = get_param('~frame_local_imu', 'NWU')
 
 		if   frame_local == 'ENU':
-		    R = XSensDriver.ENU
+			R = XSensDriver.ENU
 		elif frame_local == 'NED':
-		    R = XSensDriver.NED
+			R = XSensDriver.NED
 		elif frame_local == 'NWU':
-		    R = XSensDriver.NWU
+			R = XSensDriver.NWU
 
 		if   frame_local_imu == 'ENU':
-		    R_IMU = XSensDriver.ENU
+			R_IMU = XSensDriver.ENU
 		elif frame_local_imu == 'NED':
-		    R_IMU = XSensDriver.NED
+			R_IMU = XSensDriver.NED
 		elif frame_local_imu == 'NWU':
-		    R_IMU = XSensDriver.NWU
+			R_IMU = XSensDriver.NWU
 
 		self.R = R.dot(R_IMU.transpose())
 
